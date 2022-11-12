@@ -15,7 +15,6 @@ group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 sourceCompatibility = '11'
 
-
 configurations {
     compileOnly {
         extendsFrom annotationProcessor
@@ -35,6 +34,8 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     implementation 'mysql:mysql-connector-java'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+    testImplementation 'org.hamcrest:hamcrest'
 
     // querydsl 디펜던시 추가
     implementation "com.querydsl:querydsl-jpa:${queryDslVersion}"
@@ -44,6 +45,7 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
 
 
 // querydsl 사용할 경로 지정합니다. 현재 지정한 부분은 .gitignore에 포함되므로 git에 올라가지 않습니다.

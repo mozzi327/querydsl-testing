@@ -2,19 +2,20 @@ package com.example.test;
 
 import com.example.test.entity.Member;
 import com.example.test.entity.QMember;
+import com.example.test.entity.QTeam;
 import com.example.test.entity.Team;
 import com.querydsl.core.QueryResults;
+import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import java.util.List;
+
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 
 @SpringBootTest
@@ -28,13 +29,13 @@ public class QuerydslBasicTest {
     JPAQueryFactory queryFactory;
 
     QMember member;
-    QMember qMember;
+    QTeam team;
 
     @BeforeEach
     public void before() {
         queryFactory = new JPAQueryFactory(em);
         member = new QMember("m");
-        qMember = QMember.member;
+        team = new QTeam("t");
 
 
         Team teamA = new Team("teamA");
@@ -68,7 +69,7 @@ public class QuerydslBasicTest {
                 .setParameter("username", "member1")
                 .getSingleResult();
 
-        Assertions.assertEquals(findMember.getUsername(), "member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
     }
 
 
@@ -84,7 +85,7 @@ public class QuerydslBasicTest {
                 .fetchOne();
 
         assert findMember != null;
-        Assertions.assertEquals(findMember.getUsername(), "member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
     }
 
     @Test
@@ -99,7 +100,7 @@ public class QuerydslBasicTest {
                 .fetchOne();
 
         assert findMember != null;
-        Assertions.assertEquals(findMember.getUsername(), "member");
+        assertThat(findMember.getUsername()).isEqualTo("member");
     }
 
     @Test
@@ -112,7 +113,7 @@ public class QuerydslBasicTest {
                 .fetchOne();
 
         assert findMember != null;
-        Assertions.assertEquals(findMember.getUsername(), "member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
     }
 
 
@@ -126,7 +127,7 @@ public class QuerydslBasicTest {
                 .fetchOne();
 
         assert findMember != null;
-        Assertions.assertEquals(findMember.getUsername(), "member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
     }
 
 
@@ -161,7 +162,7 @@ public class QuerydslBasicTest {
                         member.age.eq(10))
                 .fetch();
 
-        Assertions.assertEquals(result1.size(), 1);
+        assertThat(result1.size()).isEqualTo(1);
     }
 
 
@@ -210,9 +211,10 @@ public class QuerydslBasicTest {
         Member member5 = result.get(0);
         Member member6 = result.get(1);
         Member memberNull = result.get(2);
-        Assertions.assertEquals(member5.getUsername(), "member5");
-        Assertions.assertEquals(member6.getUsername(), "member6");
-        Assertions.assertNull(memberNull.getUsername());
+        assertThat(member5.getUsername()).isEqualTo("member5");
+        assertThat(member6.getUsername()).isEqualTo("member6");
+        assertThat(memberNull.getUsername()).isNull();
+
     }
 
     @Test
@@ -225,6 +227,113 @@ public class QuerydslBasicTest {
                 .limit(2)
                 .fetch();
 
-        Assertions.assertEquals(result.size(), 2);
+        assertThat(result.size()).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("페이징 테스트2")
+    public void paging2() {
+        QueryResults<Member> queryResults = queryFactory
+                .select(member)
+                .orderBy(member.username.desc())
+                .offset(1)
+                .limit(2)
+                // fetchResult는 deprecated 되어 사용하지 않는 것을 추천 -> 차라리 select[From]()에서 count()를 쓸 것
+                .fetchResults();
+
+        assertThat(queryResults.getTotal()).isEqualTo(4);
+        assertThat(queryResults.getLimit()).isEqualTo(2);
+        assertThat(queryResults.getOffset()).isEqualTo(1);
+        assertThat(queryResults.getResults().size()).isEqualTo(2);
+    }
+
+    /**
+     * JPQL<br>
+     * select<br>
+     * COUNT(m), //회원수<br>
+     * SUM(m.age), //나이 합<br>
+     * AVG(m.age), //평균 나이<br>
+     * MAX(m.age), //최대 나이<br>
+     * MIN(m.age) //최소 나이 * from Member m<br>
+     */
+    @Test
+    @DisplayName("집합 테스트")
+    public void aggregation() throws Exception {
+        List<Tuple> result = queryFactory
+                .select(member.count(),
+                        member.age.sum(),
+                        member.age.avg(),
+                        member.age.max(),
+                        member.age.min())
+                .from(member)
+                .fetch();
+
+        Tuple tuple = result.get(0);
+        assertThat(tuple.get(member.count())).isEqualTo(4);
+        assertThat(tuple.get(member.age.sum())).isEqualTo(100);
+        assertThat(tuple.get(member.age.avg())).isEqualTo(25);
+        assertThat(tuple.get(member.age.max())).isEqualTo(40);
+        assertThat(tuple.get(member.age.min())).isEqualTo(10);
+    }
+
+
+    /**
+     * 팀의 이름과 팀의 평균 영령을 구하는 테스팅
+     * @throws Exception
+     */
+    @Test
+    @DisplayName("GroupBy 테스트")
+    public void group() throws Exception {
+        List<Tuple> result = queryFactory
+                .select(team.name, member.age.avg())
+                .from(member)
+                .join(member.team, team)
+                .groupBy(team.name)
+                .fetch();
+
+        Tuple teamA = result.get(0);
+        Tuple teamB = result.get(1);
+
+        assertThat(teamA.get(team.name)).isEqualTo("teamA");
+        assertThat(teamA.get(member.age.avg())).isEqualTo(15);
+
+
+        assertThat(teamB.get(team.name)).isEqualTo("teamB");
+        assertThat(teamB.get(member.age.avg())).isEqualTo(35);
+    }
+
+    @Test
+    @DisplayName("기본 조인 테스트")
+    public void join() throws Exception {
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .join(member.team, team)
+                .where(team.name.eq("teamA"))
+                .fetch();
+
+        System.out.println(result);
+    }
+
+    /**
+     * 세타 조인(연관관계가 없는 필드로 조인) <br>
+     * 회원의 이름이 팀 이름과 같은 회원 조회
+     * */
+    @Test
+    @DisplayName("세타 조인 테스트")
+    public void theta_join() throws Exception {
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+
+        List<Member> result = queryFactory
+                .select(member)
+                .from(member, team)
+                .where(member.username.eq(team.name))
+                .fetch();
+
+        System.out.println(result);
+
+    }
+
+
+    //// 조인 - on 절
 }
